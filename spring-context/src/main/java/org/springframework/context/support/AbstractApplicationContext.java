@@ -178,6 +178,13 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 	static {
 		// Eagerly load the ContextClosedEvent class to avoid weird classloader issues
 		// on application shutdown in WebLogic 8.1. (Reported by Dustin Woods.)
+		/**
+		 * 静态块在 AbstractApplicationContext 类第一次被类加载器加载时执行。
+		 * ContextClosedEvent.class.getName() 会取得 ContextClosedEvent 的 Class 对象并调用 getName()，从而迫使 JVM 提前加载/解析该类（确保类元数据由当前类加载器解析）。
+		 * 目的：防止在应用关闭时（例如老版本 WebLogic）出现类加载器相关的奇怪问题，提前把该事件类绑定到合适的类加载器上。
+		 * 调用 getName() 是为了实际“使用”该引用，避免被编译器/JVM优化掉；该语句本身不会改变程序逻辑，仅用于“预加载”。
+		 * 总结：就是为了“提前加载”ContextClosedEvent，以避免运行时的类加载器问题。
+		 */
 		ContextClosedEvent.class.getName();
 	}
 
@@ -584,7 +591,7 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 
 			StartupStep contextRefresh = this.applicationStartup.start("spring.context.refresh");
 
-			// Prepare this context for refreshing.
+			// Prepare this context for refreshing. 准备环境、时间戳、激活配置文件等。
 			prepareRefresh();
 
 			// Tell the subclass to refresh the internal bean factory.
@@ -666,7 +673,7 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 	protected void prepareRefresh() {
 		// Switch to active.
 		this.startupDate = System.currentTimeMillis();
-		this.closed.set(false);
+		this.closed.set(false); // 这两个变量是线程安全的资源，用以切换当前上下文的状态
 		this.active.set(true);
 
 		if (logger.isDebugEnabled()) {
@@ -679,6 +686,13 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 		}
 
 		// Initialize any placeholder property sources in the context environment.
+		/**
+		 * 作用：在刷新上下文前为环境（Environment）初始化占位符/属性源（property sources），以便后续解析 ${...} 等占位符时能读取到这些来源的值。
+		 * 时机：在 prepareRefresh() 中很早被调用，发生在校验必需属性和创建 BeanFactory 之前。
+		 * 默认实现：AbstractApplicationContext.initPropertySources() 默认什么也不做，供子类覆盖（例如 Web 上下文会把 ServletContext 的 init‑params / context‑params 添加为属性源）。
+		 * 常见问题：若看到类似 “WebApplicationContextUtils is inaccessible” 的错误，通常是因为没有把 spring-web 加到 classpath/module 依赖或模块未导出该包；在 Gradle 中添加 implementation "org.springframework:spring-web:<version>" 或在模块化项目中在 module-info.java 加上 requires 即可。
+		 *
+		 */
 		initPropertySources();
 
 		// Validate that all properties marked as required are resolvable:

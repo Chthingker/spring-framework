@@ -46,6 +46,17 @@ package org.springframework.context;
  * @see ConfigurableApplicationContext
  * @see org.springframework.jms.listener.AbstractMessageListenerContainer
  * @see org.springframework.scheduling.quartz.SchedulerFactoryBean
+ *
+ * 设计模式：Lifecycle 本身是个面向接口的抽象（Interface-based design），在架构上属于「策略（Strategy）/角色接口」的范畴：它把“可启动/可停止”的行为抽象出来，让不同组件按统一约定实现。容器层面还配合了「模板方法（Template Method）」与「委派/策略（Delegate/Strategy）」——AbstractApplicationContext 在启动/关闭时使用模板方法分步骤执行，并委派给 LifecycleProcessor 去实际管理所有实现 Lifecycle 的 bean。事件发布则属于「观察者（Observer）」模式（publishEvent / listeners）。
+ *
+ * 为什么 ApplicationContext/AbstractApplicationContext 会实现/依赖该接口：
+ *
+ * 统一控制：上下文本身也需要可启动/停止（例如在嵌入式/运行时管理场景），实现同一接口可以把容器当作一个可控组件来操作。
+ * 统一编排：容器在 start()/stop() 时会通过 LifecycleProcessor 批量启动/停止那些实现 Lifecycle 的顶级单例 bean，从而统一管理资源（线程池、消息监听器、调度器等）。比如 AbstractApplicationContext.start() 会调用 getLifecycleProcessor().start() 并发布 ContextStartedEvent。
+ * 可扩展：更高级的 SmartLifecycle 提供自动启动、相位（phase）与顺序控制，适用于有启动顺序依赖的组件（例如先启动消息监听器再启动调度器）。
+ *
+ *
+ * 总结：Lifecycle 是一个轻量的接口式抽象，用来把“生命周期控制”作为可插拔的、可被容器统一管理的职责；ApplicationContext 实现/使用它是为了能把容器自身和容器内的可管理组件以一致的方式启动/停止并支持更丰富的编排（SmartLifecycle、LifecycleProcessor 等）。
  */
 public interface Lifecycle {
 
